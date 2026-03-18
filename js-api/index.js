@@ -7,16 +7,40 @@ app.use(express.json());
 
 const port = process.env.PORT || 3000;
 
-const db = mysql.createConnection({
-  host: process.env.MYSQL_HOST || 'localhost',
-  port: process.env.MYSQL_PORT || 3306,
+const dbConfig = {
+  host: process.env.MYSQL_HOST || 'mysql',
+  port: parseInt(process.env.MYSQL_PORT) || 3306,
   user: process.env.MYSQL_USER || 'root',
-  password: process.env.MYSQL_PASSWORD || '',
+  password: process.env.MYSQL_PASSWORD || 'example',
   database: process.env.MYSQL_DATABASE || 'Rober'
-});
+};
+
+console.log('Conectando a MySQL en:', dbConfig.host + ':' + dbConfig.port);
+
+let db;
+
+function connectWithRetry() {
+  db = mysql.createConnection(dbConfig);
+  db.connect((err) => {
+    if (err) {
+      console.error('Error conectando a MySQL, reintentando en 5s...', err.message);
+      setTimeout(connectWithRetry, 5000);
+    } else {
+      console.log('Conectado a MySQL correctamente');
+    }
+  });
+  db.on('error', (err) => {
+    console.error('Error de MySQL:', err.message);
+    if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.fatal) {
+      connectWithRetry();
+    }
+  });
+}
+
+connectWithRetry();
 
 app.get('/', (req, res) => {
-  res.send('API JS funcionando');
+  res.json({ status: 'ok', message: 'API JS funcionando', mysql_host: dbConfig.host });
 });
 
 app.get('/test-db', (req, res) => {
@@ -25,7 +49,6 @@ app.get('/test-db', (req, res) => {
       console.error('Error de conexión a MySQL:', err);
       return res.status(500).json({ db_connection: 'failed', error: err.message });
     }
-    console.log('Conexión a MySQL exitosa:', results);
     res.json({ db_connection: 'success', result: results[0].result });
   });
 });
